@@ -176,6 +176,8 @@
   .kb-icon-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
   .kb-entry-thumb-btn { border: none; background: none; padding: 0; cursor: pointer; border-radius: 6px; overflow: hidden; width: 32px; height: 32px; flex: none; }
   .kb-entry-thumb-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .kb-entry-photo-mini-btn { border: none; background: none; padding: 0; cursor: pointer; border-radius: 4px; overflow: hidden; width: 18px; height: 18px; flex: none; vertical-align: middle; }
+  .kb-entry-photo-mini-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
   .kb-empty-state { font-size: 13px; color: var(--ink-soft); padding: 16px 4px; text-align: center; border: 1px solid var(--paper-line); border-radius: 10px; }
 
@@ -207,13 +209,19 @@
   .kb-field-row .kb-field { flex: 1; }
 
   .kb-items { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-  .kb-item-row { display: grid; grid-template-columns: 1fr 90px auto; gap: 6px; align-items: center; }
+  .kb-item-row { display: grid; grid-template-columns: 1fr 68px 62px auto; gap: 5px; align-items: center; }
   .kb-item-name, .kb-item-amount {
-    font-family: inherit; font-size: 16px; padding: 9px 9px; border: 1px solid var(--paper-line);
+    font-family: inherit; font-size: 16px; padding: 9px 7px; border: 1px solid var(--paper-line);
     border-radius: 8px; background: white; color: var(--ink); width: 100%;
   }
   .kb-item-amount { text-align: right; }
   .kb-item-name:focus-visible, .kb-item-amount:focus-visible { outline: 2px solid var(--indigo); outline-offset: 1px; }
+  .kb-item-tax-btn {
+    font-size: 10px; font-weight: 700; padding: 8px 2px; border-radius: 8px; border: 1px solid var(--paper-line);
+    background: var(--paper-dark); color: var(--ink-soft); cursor: pointer; white-space: nowrap;
+  }
+  .kb-item-tax-btn.kb-item-tax-excl { background: var(--gold); color: white; border-color: var(--gold); }
+  .kb-item-tax-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
   .kb-add-item-btn {
     align-self: flex-start; background: none; border: 1px solid var(--paper-line); color: var(--indigo);
     font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-top: 2px;
@@ -752,7 +760,19 @@
 
   // ---------- Items (multi-item entry) ----------
 
-  function createItemRowEl(name, amount) {
+  var TAX_MODES = ["incl", "excl8", "excl10"];
+  function taxLabel(mode) {
+    if (mode === "excl8") return "税抜+8%";
+    if (mode === "excl10") return "税抜+10%";
+    return "税込";
+  }
+  function computeFinalAmount(rawAmount, taxMode) {
+    if (taxMode === "excl8") return Math.floor(rawAmount * 1.08);
+    if (taxMode === "excl10") return Math.floor(rawAmount * 1.10);
+    return rawAmount;
+  }
+
+  function createItemRowEl(name, amount, taxMode) {
     var row = document.createElement("div");
     row.className = "kb-item-row";
     var nameInput = document.createElement("input");
@@ -767,6 +787,21 @@
     amountInput.setAttribute("pattern", "[0-9]*");
     amountInput.placeholder = "金額";
     if (amount) amountInput.value = amount;
+    var taxBtn = document.createElement("button");
+    taxBtn.type = "button";
+    taxBtn.className = "kb-item-tax-btn";
+    var initialMode = taxMode && TAX_MODES.indexOf(taxMode) !== -1 ? taxMode : "incl";
+    taxBtn.setAttribute("data-tax-mode", initialMode);
+    taxBtn.textContent = taxLabel(initialMode);
+    taxBtn.classList.toggle("kb-item-tax-excl", initialMode !== "incl");
+    taxBtn.addEventListener("click", function () {
+      var cur = taxBtn.getAttribute("data-tax-mode");
+      var next = TAX_MODES[(TAX_MODES.indexOf(cur) + 1) % TAX_MODES.length];
+      taxBtn.setAttribute("data-tax-mode", next);
+      taxBtn.textContent = taxLabel(next);
+      taxBtn.classList.toggle("kb-item-tax-excl", next !== "incl");
+      updateItemsTotalDisplay();
+    });
     var delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.className = "kb-icon-btn kb-icon-del";
@@ -774,12 +809,13 @@
     delBtn.textContent = "✕";
     row.appendChild(nameInput);
     row.appendChild(amountInput);
+    row.appendChild(taxBtn);
     row.appendChild(delBtn);
     return row;
   }
 
-  function addItemRow(name, amount) {
-    var row = createItemRowEl(name, amount);
+  function addItemRow(name, amount, taxMode) {
+    var row = createItemRowEl(name, amount, taxMode);
     els.itemsContainer.appendChild(row);
     return row;
   }
@@ -787,7 +823,10 @@
   function resetItemRows(items) {
     els.itemsContainer.innerHTML = "";
     if (items && items.length) {
-      items.forEach(function (it) { addItemRow(it.name, it.amount); });
+      items.forEach(function (it) {
+        var raw = it.rawAmount != null ? it.rawAmount : it.amount;
+        addItemRow(it.name, raw, it.taxMode);
+      });
     } else {
       addItemRow();
     }
@@ -798,8 +837,9 @@
     var rows = els.itemsContainer.querySelectorAll(".kb-item-row");
     var total = 0;
     rows.forEach(function (row) {
-      var amt = Number(row.querySelector(".kb-item-amount").value);
-      if (amt > 0) total += amt;
+      var raw = Number(row.querySelector(".kb-item-amount").value);
+      var mode = row.querySelector(".kb-item-tax-btn").getAttribute("data-tax-mode");
+      if (raw > 0) total += computeFinalAmount(raw, mode);
     });
     els.itemsTotalDisplay.textContent = "合計: " + formatMoney(total);
   }
@@ -934,12 +974,14 @@
     rows.forEach(function (row) {
       var nameInput = row.querySelector(".kb-item-name");
       var amountInput = row.querySelector(".kb-item-amount");
+      var taxBtn = row.querySelector(".kb-item-tax-btn");
+      var taxMode = taxBtn ? taxBtn.getAttribute("data-tax-mode") : "incl";
       var name = nameInput.value.trim();
       var amountRaw = amountInput.value.trim();
-      var amt = Number(amountRaw);
+      var raw = Number(amountRaw);
       if (!name && !amountRaw) return;
-      if (!name || !amountRaw || !amt || amt <= 0) { hasInvalidRow = true; return; }
-      items.push({ name: name, amount: amt });
+      if (!name || !amountRaw || !raw || raw <= 0) { hasInvalidRow = true; return; }
+      items.push({ name: name, amount: computeFinalAmount(raw, taxMode), rawAmount: raw, taxMode: taxMode });
     });
     if (hasInvalidRow) { showFormError("各商品に商品名と金額（1円以上）の両方を入力してください"); return; }
     if (items.length === 0) { showFormError("商品を1つ以上入力してください"); return; }
@@ -1169,18 +1211,19 @@
         var itemsArr = itemsOf(e);
         var showAmountPerItem = itemsArr.length > 1;
         var itemsHtml = itemsArr.map(function (it) {
+          var taxNote = it.taxMode && it.taxMode !== "incl" ? "（税抜+" + (it.taxMode === "excl8" ? "8" : "10") + "%）" : "";
           return '<div class="kb-entry-item">' + escapeHtml(it.name) +
-            (showAmountPerItem ? " ・ " + formatMoney(it.amount) : "") + "</div>";
+            (showAmountPerItem ? " ・ " + formatMoney(it.amount) : "") + taxNote + "</div>";
         }).join("");
         var recurringBadge = e.recurringId ? '<span class="kb-entry-recurring-badge">定期</span>' : "";
-        var thumb = e.photo
-          ? '<button type="button" class="kb-entry-thumb-btn kb-entry-photo" data-id="' + e.id + '"><img src="' + e.photo + '" alt="レシート写真" /></button>'
-          : '<div style="width:46px"></div>';
+        var photoBadge = e.photo
+          ? '<button type="button" class="kb-entry-photo-mini-btn kb-entry-photo" data-id="' + e.id + '"><img src="' + e.photo + '" alt="レシート写真" /></button>'
+          : "";
         return (
           '<div class="kb-entry">' +
-          thumb +
+          '<div class="kb-entry-time">' + escapeHtml(e.time) + "</div>" +
           '<div class="kb-entry-info">' +
-          '<div class="kb-entry-store">' + escapeHtml(e.store) + recurringBadge + "</div>" +
+          '<div class="kb-entry-store">' + escapeHtml(e.store) + recurringBadge + photoBadge + "</div>" +
           itemsHtml +
           "</div>" +
           '<span class="kb-entry-cat" style="background:' + cat.color + '">' + escapeHtml(cat.label) + "</span>" +
