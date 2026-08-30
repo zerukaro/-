@@ -309,6 +309,13 @@
   .kb-budget-progress { margin-bottom: 20px; }
   .kb-budget-progress-label { font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; font-weight: 600; }
   .kb-budget-progress .kb-cat-track { height: 10px; }
+
+  .kb-backup-banner {
+    background: rgba(201,162,39,0.12); border: 1px solid rgba(201,162,39,0.4); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--ink);
+  }
+  .kb-backup-banner-actions { display: flex; gap: 8px; }
+  .kb-backup-btn { flex: none; padding: 7px 14px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -334,6 +341,13 @@
     <div id="loadingMsg" class="kb-loading">読み込み中…</div>
 
     <div id="mainContent" class="kb-hidden">
+      <div class="kb-backup-banner kb-hidden" id="backupBanner">
+        <span id="backupBannerText">しばらくバックアップを取っていません。データ保護のためエクスポートをおすすめします。</span>
+        <div class="kb-backup-banner-actions">
+          <button type="button" class="kb-btn-primary kb-backup-btn" id="backupNowBtn">今すぐバックアップ</button>
+          <button type="button" class="kb-btn-secondary kb-backup-btn" id="backupLaterBtn">後で</button>
+        </div>
+      </div>
       <div class="kb-summary">
         <div class="kb-total-card">
           <div class="kb-total-label" id="totalLabel"></div>
@@ -546,6 +560,10 @@
   var ENTRIES_KEY = "kakeibo:entries";
   var SUBS_KEY = "kakeibo:subscriptions";
   var BUDGETS_KEY = "kakeibo:budgets";
+  var LAST_EXPORT_KEY = "kakeibo:lastExport";
+  var EXPORT_SNOOZE_KEY = "kakeibo:exportSnoozeUntil";
+  var BACKUP_REMIND_DAYS = 30;
+  var BACKUP_SNOOZE_DAYS = 7;
   var CAPACITY_WARN_BYTES = 4200000;
 
   function pad(n) { return String(n).padStart(2, "0"); }
@@ -586,6 +604,7 @@
       "subCancelBtn", "subSubmitBtn",
       "budgetInput", "budgetProgress", "budgetProgressLabel", "budgetProgressFill",
       "exportBtn", "importBtn", "importFile",
+      "backupBanner", "backupBannerText", "backupNowBtn", "backupLaterBtn",
       "photoLightbox", "lightboxImg"
     ].forEach(function (id) { els[id] = document.getElementById(id); });
   }
@@ -647,6 +666,25 @@
     els.budgetInput.value = budgetAmount || "";
     renderAll();
     renderSubs();
+    checkBackupReminder();
+  }
+
+  function checkBackupReminder() {
+    var now = Date.now();
+    var snoozeUntil = Number(lsGet(EXPORT_SNOOZE_KEY)) || 0;
+    if (now < snoozeUntil) { els.backupBanner.classList.add("kb-hidden"); return; }
+    var lastExport = Number(lsGet(LAST_EXPORT_KEY)) || 0;
+    var daysSince = lastExport ? Math.floor((now - lastExport) / 86400000) : null;
+    if (entries.length === 0 && subscriptions.length === 0) { els.backupBanner.classList.add("kb-hidden"); return; }
+    if (daysSince === null) {
+      els.backupBannerText.textContent = "まだバックアップを取っていません。データ保護のため一度エクスポートしておくのをおすすめします。";
+      els.backupBanner.classList.remove("kb-hidden");
+    } else if (daysSince >= BACKUP_REMIND_DAYS) {
+      els.backupBannerText.textContent = "最後のバックアップから" + daysSince + "日経っています。データ保護のためエクスポートをおすすめします。";
+      els.backupBanner.classList.remove("kb-hidden");
+    } else {
+      els.backupBanner.classList.add("kb-hidden");
+    }
   }
 
   async function persistEntries() {
@@ -1338,6 +1376,8 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    lsSet(LAST_EXPORT_KEY, String(Date.now()));
+    els.backupBanner.classList.add("kb-hidden");
   }
 
   function importData(file) {
@@ -1363,6 +1403,8 @@
       persistSubscriptions();
       persistBudgets();
       els.budgetInput.value = budgetAmount || "";
+      lsSet(LAST_EXPORT_KEY, String(Date.now()));
+      els.backupBanner.classList.add("kb-hidden");
       renderAll();
       renderSubs();
     };
@@ -1517,6 +1559,12 @@
     });
 
     els.exportBtn.addEventListener("click", exportData);
+    els.backupNowBtn.addEventListener("click", exportData);
+    els.backupLaterBtn.addEventListener("click", function () {
+      var snoozeUntil = Date.now() + BACKUP_SNOOZE_DAYS * 86400000;
+      lsSet(EXPORT_SNOOZE_KEY, String(snoozeUntil));
+      els.backupBanner.classList.add("kb-hidden");
+    });
     els.importBtn.addEventListener("click", function () { els.importFile.click(); });
     els.importFile.addEventListener("change", function () {
       var file = els.importFile.files && els.importFile.files[0];
