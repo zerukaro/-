@@ -761,15 +761,42 @@
   // ---------- Items (multi-item entry) ----------
 
   var TAX_MODES = ["incl", "excl8", "excl10"];
+  var TAX_RATES = { excl8: 1.08, excl10: 1.10 };
   function taxLabel(mode) {
     if (mode === "excl8") return "税抜+8%";
     if (mode === "excl10") return "税抜+10%";
     return "税込";
   }
-  function computeFinalAmount(rawAmount, taxMode) {
-    if (taxMode === "excl8") return Math.floor(rawAmount * 1.08);
-    if (taxMode === "excl10") return Math.floor(rawAmount * 1.10);
-    return rawAmount;
+  // レジと同じく「同じ税率の商品をまとめて合計してから消費税を計算」する方式。
+  // 商品ごとに個別計算すると端数の切り捨てが商品数だけ発生し、実際のレシートより少なくなるためこの方式にしている。
+  function applyTaxGrouping(rawItems) {
+    var rawSum = { excl8: 0, excl10: 0 };
+    var lastIdx = { excl8: -1, excl10: -1 };
+    rawItems.forEach(function (it, i) {
+      if (it.taxMode === "excl8" || it.taxMode === "excl10") {
+        rawSum[it.taxMode] += it.rawAmount;
+        lastIdx[it.taxMode] = i;
+      }
+    });
+    var taxedSum = {
+      excl8: Math.floor(rawSum.excl8 * TAX_RATES.excl8),
+      excl10: Math.floor(rawSum.excl10 * TAX_RATES.excl10)
+    };
+    var runningIdeal = { excl8: 0, excl10: 0 };
+    var resultItems = rawItems.map(function (it, i) {
+      var mode = it.taxMode === "excl8" || it.taxMode === "excl10" ? it.taxMode : "incl";
+      var amt;
+      if (mode === "incl") {
+        amt = it.rawAmount;
+      } else {
+        var ideal = Math.floor(it.rawAmount * TAX_RATES[mode]);
+        runningIdeal[mode] += ideal;
+        amt = (i === lastIdx[mode]) ? (ideal + (taxedSum[mode] - runningIdeal[mode])) : ideal;
+      }
+      return { name: it.name, amount: amt, rawAmount: it.rawAmount, taxMode: mode };
+    });
+    var total = resultItems.reduce(function (s, it) { return s + it.amount; }, 0);
+    return { items: resultItems, total: total };
   }
 
   function createItemRowEl(name, amount, taxMode) {
@@ -833,14 +860,21 @@
     updateItemsTotalDisplay();
   }
 
-  function updateItemsTotalDisplay() {
+  function collectRawItemsFromDOM() {
     var rows = els.itemsContainer.querySelectorAll(".kb-item-row");
-    var total = 0;
+    var result = [];
     rows.forEach(function (row) {
-      var raw = Number(row.querySelector(".kb-item-amount").value);
+      var name = row.querySelector(".kb-item-name").value.trim();
+      var rawStr = row.querySelector(".kb-item-amount").value.trim();
       var mode = row.querySelector(".kb-item-tax-btn").getAttribute("data-tax-mode");
-      if (raw > 0) total += computeFinalAmount(raw, mode);
+      result.push({ name: name, rawAmountStr: rawStr, rawAmount: Number(rawStr), taxMode: mode });
     });
+    return result;
+  }
+
+  function updateItemsTotalDisplay() {
+    var raw = collectRawItemsFromDOM().filter(function (it) { return it.rawAmount > 0; });
+    var total = applyTaxGrouping(raw).total;
     els.itemsTotalDisplay.textContent = "合計: " + formatMoney(total);
   }
 
@@ -968,25 +1002,20 @@
     var store = els.fStore.value.trim();
     if (!store) { showFormError("店名を入力してください"); return; }
 
-    var rows = els.itemsContainer.querySelectorAll(".kb-item-row");
-    var items = [];
+    var rawRows = collectRawItemsFromDOM();
+    var validRaw = [];
     var hasInvalidRow = false;
-    rows.forEach(function (row) {
-      var nameInput = row.querySelector(".kb-item-name");
-      var amountInput = row.querySelector(".kb-item-amount");
-      var taxBtn = row.querySelector(".kb-item-tax-btn");
-      var taxMode = taxBtn ? taxBtn.getAttribute("data-tax-mode") : "incl";
-      var name = nameInput.value.trim();
-      var amountRaw = amountInput.value.trim();
-      var raw = Number(amountRaw);
-      if (!name && !amountRaw) return;
-      if (!name || !amountRaw || !raw || raw <= 0) { hasInvalidRow = true; return; }
-      items.push({ name: name, amount: computeFinalAmount(raw, taxMode), rawAmount: raw, taxMode: taxMode });
+    rawRows.forEach(function (it) {
+      if (!it.name && !it.rawAmountStr) return;
+      if (!it.name || !it.rawAmountStr || !it.rawAmount || it.rawAmount <= 0) { hasInvalidRow = true; return; }
+      validRaw.push(it);
     });
     if (hasInvalidRow) { showFormError("各商品に商品名と金額（1円以上）の両方を入力してください"); return; }
-    if (items.length === 0) { showFormError("商品を1つ以上入力してください"); return; }
+    if (validRaw.length === 0) { showFormError("商品を1つ以上入力してください"); return; }
 
-    var totalAmount = items.reduce(function (s, it) { return s + it.amount; }, 0);
+    var taxResult = applyTaxGrouping(validRaw);
+    var items = taxResult.items;
+    var totalAmount = taxResult.total;
 
     function finishExpenseSave(photo) {
       var payload = {
