@@ -209,13 +209,19 @@
   .kb-field-row .kb-field { flex: 1; }
 
   .kb-items { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-  .kb-item-row { display: grid; grid-template-columns: 1fr 68px 62px auto; gap: 5px; align-items: center; }
+  .kb-item-row { display: grid; grid-template-columns: 24px 1fr 62px 56px auto; gap: 4px; align-items: center; }
   .kb-item-name, .kb-item-amount {
-    font-family: inherit; font-size: 16px; padding: 9px 7px; border: 1px solid var(--paper-line);
+    font-family: inherit; font-size: 16px; padding: 9px 6px; border: 1px solid var(--paper-line);
     border-radius: 8px; background: white; color: var(--ink); width: 100%;
   }
   .kb-item-amount { text-align: right; }
   .kb-item-name:focus-visible, .kb-item-amount:focus-visible { outline: 2px solid var(--indigo); outline-offset: 1px; }
+  .kb-item-sign-btn {
+    font-size: 12px; font-weight: 700; padding: 8px 0; border-radius: 8px; border: 1px solid var(--paper-line);
+    background: var(--paper-dark); color: var(--ink-soft); cursor: pointer;
+  }
+  .kb-item-sign-btn.kb-item-sign-active { background: var(--vermillion); color: white; border-color: var(--vermillion); }
+  .kb-item-sign-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
   .kb-item-tax-btn {
     font-size: 10px; font-weight: 700; padding: 8px 2px; border-radius: 8px; border: 1px solid var(--paper-line);
     background: var(--paper-dark); color: var(--ink-soft); cursor: pointer; white-space: nowrap;
@@ -577,7 +583,10 @@
   function pad(n) { return String(n).padStart(2, "0"); }
   function toDateStr(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
   function monthKeyOf(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1); }
-  function formatMoney(n) { return "¥" + Number(n || 0).toLocaleString("ja-JP"); }
+  function formatMoney(n) {
+    var num = Number(n || 0);
+    return (num < 0 ? "-¥" : "¥") + Math.abs(num).toLocaleString("ja-JP");
+  }
   function genId() { return "e_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8); }
   function categoryOf(id) {
     for (var i = 0; i < CATEGORIES.length; i++) { if (CATEGORIES[i].id === id) return CATEGORIES[i]; }
@@ -799,9 +808,22 @@
     return { items: resultItems, total: total };
   }
 
-  function createItemRowEl(name, amount, taxMode) {
+  function createItemRowEl(name, amount, taxMode, isNegative) {
     var row = document.createElement("div");
     row.className = "kb-item-row";
+    var signBtn = document.createElement("button");
+    signBtn.type = "button";
+    signBtn.className = "kb-item-sign-btn";
+    signBtn.textContent = "－";
+    signBtn.setAttribute("aria-label", "値引き（マイナス）として扱う");
+    signBtn.setAttribute("data-negative", isNegative ? "1" : "0");
+    signBtn.classList.toggle("kb-item-sign-active", !!isNegative);
+    signBtn.addEventListener("click", function () {
+      var next = signBtn.getAttribute("data-negative") !== "1";
+      signBtn.setAttribute("data-negative", next ? "1" : "0");
+      signBtn.classList.toggle("kb-item-sign-active", next);
+      updateItemsTotalDisplay();
+    });
     var nameInput = document.createElement("input");
     nameInput.type = "text";
     nameInput.className = "kb-item-name";
@@ -813,7 +835,7 @@
     amountInput.setAttribute("inputmode", "numeric");
     amountInput.setAttribute("pattern", "[0-9]*");
     amountInput.placeholder = "金額";
-    if (amount) amountInput.value = amount;
+    if (amount != null) amountInput.value = Math.abs(amount);
     var taxBtn = document.createElement("button");
     taxBtn.type = "button";
     taxBtn.className = "kb-item-tax-btn";
@@ -834,6 +856,7 @@
     delBtn.className = "kb-icon-btn kb-icon-del";
     delBtn.setAttribute("aria-label", "この商品を削除");
     delBtn.textContent = "✕";
+    row.appendChild(signBtn);
     row.appendChild(nameInput);
     row.appendChild(amountInput);
     row.appendChild(taxBtn);
@@ -841,8 +864,8 @@
     return row;
   }
 
-  function addItemRow(name, amount, taxMode) {
-    var row = createItemRowEl(name, amount, taxMode);
+  function addItemRow(name, amount, taxMode, isNegative) {
+    var row = createItemRowEl(name, amount, taxMode, isNegative);
     els.itemsContainer.appendChild(row);
     return row;
   }
@@ -852,7 +875,7 @@
     if (items && items.length) {
       items.forEach(function (it) {
         var raw = it.rawAmount != null ? it.rawAmount : it.amount;
-        addItemRow(it.name, raw, it.taxMode);
+        addItemRow(it.name, raw, it.taxMode, raw < 0);
       });
     } else {
       addItemRow();
@@ -867,13 +890,15 @@
       var name = row.querySelector(".kb-item-name").value.trim();
       var rawStr = row.querySelector(".kb-item-amount").value.trim();
       var mode = row.querySelector(".kb-item-tax-btn").getAttribute("data-tax-mode");
-      result.push({ name: name, rawAmountStr: rawStr, rawAmount: Number(rawStr), taxMode: mode });
+      var isNegative = row.querySelector(".kb-item-sign-btn").getAttribute("data-negative") === "1";
+      var num = rawStr === "" ? NaN : Number(rawStr) * (isNegative ? -1 : 1);
+      result.push({ name: name, rawAmountStr: rawStr, rawAmount: num, taxMode: mode });
     });
     return result;
   }
 
   function updateItemsTotalDisplay() {
-    var raw = collectRawItemsFromDOM().filter(function (it) { return it.rawAmount > 0; });
+    var raw = collectRawItemsFromDOM().filter(function (it) { return isFinite(it.rawAmount) && it.rawAmount !== 0; });
     var total = applyTaxGrouping(raw).total;
     els.itemsTotalDisplay.textContent = "合計: " + formatMoney(total);
   }
@@ -1007,10 +1032,10 @@
     var hasInvalidRow = false;
     rawRows.forEach(function (it) {
       if (!it.name && !it.rawAmountStr) return;
-      if (!it.name || !it.rawAmountStr || !it.rawAmount || it.rawAmount <= 0) { hasInvalidRow = true; return; }
+      if (!it.name || !it.rawAmountStr || !isFinite(it.rawAmount) || it.rawAmount === 0) { hasInvalidRow = true; return; }
       validRaw.push(it);
     });
-    if (hasInvalidRow) { showFormError("各商品に商品名と金額（1円以上）の両方を入力してください"); return; }
+    if (hasInvalidRow) { showFormError("各商品に商品名と金額（0円以外）の両方を入力してください"); return; }
     if (validRaw.length === 0) { showFormError("商品を1つ以上入力してください"); return; }
 
     var taxResult = applyTaxGrouping(validRaw);
@@ -1073,7 +1098,7 @@
   }
 
   function renderCatChips() {
-    els.catSelect.innerHTML = CATEGORIES.map(function (c) {
+    els.catSelect.innerHTML = CATEGORIES.filter(function (c) { return c.id !== "subscription"; }).map(function (c) {
       var active = c.id === selectedCategory ? " kb-cat-active" : "";
       return '<button type="button" class="kb-cat-chip' + active + '" data-cat="' + c.id +
         '" style="background:' + c.color + '">' + escapeHtml(c.label) + "</button>";
