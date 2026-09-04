@@ -93,8 +93,8 @@
   .kb-weekdays div:nth-child(7) { color: var(--indigo); }
   .kb-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
   .kb-cell {
-    min-height: 62px; border-right: 1px solid var(--paper-line); border-bottom: 1px solid var(--paper-line);
-    padding: 5px 6px; position: relative; cursor: pointer; background: transparent; text-align: left;
+    min-height: 74px; border-right: 1px solid var(--paper-line); border-bottom: 1px solid var(--paper-line);
+    padding: 5px 24px 5px 6px; position: relative; cursor: pointer; background: transparent; text-align: left;
     font-family: inherit; color: inherit; width: 100%; display: block; transition: background 0.1s ease;
     touch-action: manipulation;
   }
@@ -111,17 +111,20 @@
   }
   .kb-daytotal { margin-top: 4px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--vermillion); font-weight: 600; }
   .kb-daytotal-income { margin-top: 2px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--income); font-weight: 600; }
-  .kb-stamp {
-    position: absolute; top: 2px; right: 2px; width: 22px; height: 22px;
-    border: 1.5px solid var(--vermillion); border-radius: 50%; color: var(--vermillion); font-size: 9px;
+  .kb-stamp, .kb-stamp-income, .kb-stamp-sub {
+    position: absolute; right: 2px; width: 17px; height: 17px;
+    border-radius: 50%; font-size: 8px;
     display: flex; align-items: center; justify-content: center; font-family: 'Shippori Mincho', serif;
-    font-weight: 800; opacity: 0.8; transform: rotate(-8deg);
+    font-weight: 800; opacity: 0.85;
+  }
+  .kb-stamp {
+    top: 2px; border: 1.5px solid var(--vermillion); color: var(--vermillion); transform: rotate(-8deg);
+  }
+  .kb-stamp-sub {
+    top: 21px; border: 1.5px solid var(--indigo); color: var(--indigo); transform: rotate(-4deg); background: rgba(31,58,92,0.05);
   }
   .kb-stamp-income {
-    position: absolute; top: 2px; left: 2px; width: 22px; height: 22px;
-    border: 1.5px solid var(--income); border-radius: 50%; color: var(--income); font-size: 9px;
-    display: flex; align-items: center; justify-content: center; font-family: 'Shippori Mincho', serif;
-    font-weight: 800; opacity: 0.8; transform: rotate(8deg);
+    top: 40px; border: 1.5px solid var(--income); color: var(--income); transform: rotate(8deg);
   }
   .kb-stamp.kb-stamp-pop { animation: kb-pop 0.5s ease; }
   @keyframes kb-pop {
@@ -1128,11 +1131,13 @@
 
     var dayTotals = {};
     var dayIncomeTotals = {};
+    var daySubDates = {};
     getMonthEntries().forEach(function (e) {
       if (typeOf(e) === "income") {
         dayIncomeTotals[e.date] = (dayIncomeTotals[e.date] || 0) + Number(e.amount || 0);
       } else {
         dayTotals[e.date] = (dayTotals[e.date] || 0) + Number(e.amount || 0);
+        if (e.recurringId) daySubDates[e.date] = true;
       }
     });
 
@@ -1155,6 +1160,9 @@
       if (incomeTotal) {
         html += '<div class="kb-daytotal-income">+' + formatMoney(incomeTotal) + "</div>";
         html += '<span class="kb-stamp-income">入</span>';
+      }
+      if (daySubDates[dateStr]) {
+        html += '<span class="kb-stamp-sub">サ</span>';
       }
       html += "</button>";
     }
