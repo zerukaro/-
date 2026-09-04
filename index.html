@@ -308,21 +308,8 @@
   .kb-lightbox { background: rgba(20,20,18,0.85); }
   .kb-lightbox img { max-width: 100%; max-height: 85vh; border-radius: 10px; display: block; }
 
-  .kb-budget-row {
-    display: grid; grid-template-columns: 10px 1fr 130px; align-items: center; gap: 8px;
-    background: white; border: 1px solid var(--paper-line); border-radius: 10px; padding: 9px 10px; font-size: 12px; margin-bottom: 7px;
-  }
-  .kb-budget-input {
-    font-family: inherit; font-size: 14px; padding: 7px 9px; border: 1px solid var(--paper-line);
-    border-radius: 8px; text-align: right; width: 100%; background: white; color: var(--ink);
-  }
-  .kb-budget-input:focus-visible { outline: 2px solid var(--indigo); outline-offset: 1px; }
   .kb-data-mgmt-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .kb-data-btn { flex: none; padding: 8px 16px; }
-
-  .kb-budget-progress { margin-bottom: 20px; }
-  .kb-budget-progress-label { font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; font-weight: 600; }
-  .kb-budget-progress .kb-cat-track { height: 10px; }
 
   .kb-backup-banner {
     background: rgba(201,162,39,0.12); border: 1px solid rgba(201,162,39,0.4); border-radius: 10px;
@@ -372,15 +359,10 @@
           <div class="kb-total-value" id="incomeValue"></div>
         </div>
         <div class="kb-total-card kb-balance-card" id="balanceCard">
-          <div class="kb-total-label">残り（収入－支出）</div>
+          <div class="kb-total-label">残り</div>
           <div class="kb-total-value" id="balanceValue"></div>
         </div>
         <div class="kb-cat-bars" id="catBars"></div>
-      </div>
-
-      <div class="kb-budget-progress kb-hidden" id="budgetProgress">
-        <div class="kb-budget-progress-label" id="budgetProgressLabel"></div>
-        <div class="kb-cat-track"><span class="kb-cat-fill" id="budgetProgressFill"></span></div>
       </div>
 
       <div class="kb-calendar">
@@ -429,16 +411,6 @@
 
       <div class="kb-subs">
         <div class="kb-subs-header">
-          <div class="kb-subs-title">予算設定</div>
-        </div>
-        <div class="kb-field" style="max-width: 240px;">
-          <label for="budgetInput">今月の予算（円）</label>
-          <input id="budgetInput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="例：50000" />
-        </div>
-      </div>
-
-      <div class="kb-subs">
-        <div class="kb-subs-header">
           <div class="kb-subs-title">データ管理</div>
         </div>
         <div class="kb-data-mgmt-actions">
@@ -446,7 +418,7 @@
           <button type="button" class="kb-btn-secondary kb-data-btn" id="importBtn">インポート</button>
           <input type="file" id="importFile" accept="application/json" class="kb-hidden" />
         </div>
-        <div class="kb-photo-hint">エクスポートすると、記録・サブスク・予算設定を1つのファイルとして保存できます。機種変更やブラウザ変更の際のバックアップにご利用ください。</div>
+        <div class="kb-photo-hint">エクスポートすると、記録・サブスクを1つのファイルとして保存できます。機種変更やブラウザ変更の際のバックアップにご利用ください。</div>
       </div>
 
       <div id="storageWarning" class="kb-storage-warning kb-hidden">保存に失敗しました。もう一度お試しください。</div>
@@ -556,7 +528,6 @@
 
   var entries = [];
   var subscriptions = [];
-  var budgetAmount = null;
   var viewDate = new Date();
   var selectedDay = toDateStr(new Date());
   var selectedCategory = CATEGORIES[0].id;
@@ -573,7 +544,6 @@
 
   var ENTRIES_KEY = "kakeibo:entries";
   var SUBS_KEY = "kakeibo:subscriptions";
-  var BUDGETS_KEY = "kakeibo:budgets";
   var LAST_EXPORT_KEY = "kakeibo:lastExport";
   var EXPORT_SNOOZE_KEY = "kakeibo:exportSnoozeUntil";
   var BACKUP_REMIND_DAYS = 30;
@@ -619,7 +589,6 @@
       "addSubBtn", "subsList", "subOverlay", "subModalTitle", "subCloseBtn",
       "subName", "subAmount", "subDay", "subFormError",
       "subCancelBtn", "subSubmitBtn",
-      "budgetInput", "budgetProgress", "budgetProgressLabel", "budgetProgressFill",
       "exportBtn", "importBtn", "importFile",
       "backupBanner", "backupBannerText", "backupNowBtn", "backupLaterBtn",
       "photoLightbox", "lightboxImg"
@@ -668,19 +637,10 @@
       if (sLocal) { try { subscriptions = JSON.parse(sLocal); } catch (e2) { subscriptions = []; } }
     }
 
-    var bCloud = await cloudGet(BUDGETS_KEY);
-    if (bCloud) {
-      try { budgetAmount = JSON.parse(bCloud); } catch (e) { budgetAmount = null; }
-    } else {
-      var bLocal = lsGet(BUDGETS_KEY);
-      if (bLocal) { try { budgetAmount = JSON.parse(bLocal); } catch (e2) { budgetAmount = null; } }
-    }
-
     ensureSubscriptionEntriesForMonth(viewDate);
 
     els.loadingMsg.classList.add("kb-hidden");
     els.mainContent.classList.remove("kb-hidden");
-    els.budgetInput.value = budgetAmount || "";
     renderAll();
     renderSubs();
     checkBackupReminder();
@@ -716,12 +676,6 @@
     var json = JSON.stringify(subscriptions);
     await cloudSet(SUBS_KEY, json);
     lsSet(SUBS_KEY, json);
-  }
-
-  async function persistBudgets() {
-    var json = JSON.stringify(budgetAmount);
-    await cloudSet(BUDGETS_KEY, json);
-    lsSet(BUDGETS_KEY, json);
   }
 
   // ---------- Recurring subscriptions ----------
@@ -1130,7 +1084,16 @@
     var incomeEntries = monthEntries.filter(function (e) { return typeOf(e) === "income"; });
     var monthTotal = expenseEntries.reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
     var monthIncome = incomeEntries.reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
-    var balance = monthIncome - monthTotal;
+
+    var viewMonthKey = monthKeyOf(viewDate);
+    var upToViewedMonth = entries.filter(function (e) { return e.date.slice(0, 7) <= viewMonthKey; });
+    var allTimeIncome = upToViewedMonth
+      .filter(function (e) { return typeOf(e) === "income"; })
+      .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
+    var allTimeExpense = upToViewedMonth
+      .filter(function (e) { return typeOf(e) === "expense"; })
+      .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
+    var balance = allTimeIncome - allTimeExpense;
 
     els.totalLabel.textContent = (viewDate.getMonth() + 1) + "月の支出";
     els.totalValue.textContent = formatMoney(monthTotal);
@@ -1153,20 +1116,6 @@
         "</div>"
       );
     }).join("");
-
-    if (budgetAmount) {
-      var bPct = Math.min(100, Math.round((monthTotal / budgetAmount) * 100));
-      var bColor = monthTotal > budgetAmount ? "var(--vermillion)" : (bPct >= 90 ? "var(--gold)" : "var(--indigo)");
-      var labelText = monthTotal > budgetAmount
-        ? "予算オーバー：" + formatMoney(monthTotal - budgetAmount) + " 超過（予算 " + formatMoney(budgetAmount) + "）"
-        : "予算 " + formatMoney(budgetAmount) + " のうち " + formatMoney(monthTotal) + " 使用（" + bPct + "%、残り " + formatMoney(budgetAmount - monthTotal) + "）";
-      els.budgetProgressLabel.textContent = labelText;
-      els.budgetProgressFill.style.width = bPct + "%";
-      els.budgetProgressFill.style.background = bColor;
-      els.budgetProgress.classList.remove("kb-hidden");
-    } else {
-      els.budgetProgress.classList.add("kb-hidden");
-    }
   }
 
   function renderCalendar() {
@@ -1446,23 +1395,13 @@
     }).join("");
   }
 
-  // ---------- Budget ----------
-
-  function handleBudgetChange() {
-    var val = Number(els.budgetInput.value);
-    if (val > 0) { budgetAmount = val; } else { budgetAmount = null; els.budgetInput.value = ""; }
-    persistBudgets();
-    renderSummary();
-  }
-
   // ---------- Export / Import ----------
 
   function exportData() {
     var payload = {
       exportedAt: new Date().toISOString(),
       entries: entries,
-      subscriptions: subscriptions,
-      budgetAmount: budgetAmount
+      subscriptions: subscriptions
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
@@ -1495,11 +1434,8 @@
       if (!ok) return;
       entries = data.entries || [];
       subscriptions = data.subscriptions || [];
-      budgetAmount = typeof data.budgetAmount === "number" ? data.budgetAmount : (data.budgets && data.budgets.overall) || null;
       persistEntries();
       persistSubscriptions();
-      persistBudgets();
-      els.budgetInput.value = budgetAmount || "";
       lsSet(LAST_EXPORT_KEY, String(Date.now()));
       els.backupBanner.classList.add("kb-hidden");
       renderAll();
@@ -1648,11 +1584,6 @@
       input.addEventListener("keydown", function (e) {
         if (e.key === "Enter") { e.preventDefault(); handleSubSubmit(); }
       });
-    });
-
-    els.budgetInput.addEventListener("change", handleBudgetChange);
-    els.budgetInput.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
     });
 
     els.exportBtn.addEventListener("click", exportData);
