@@ -203,6 +203,8 @@
   .kb-type-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   #typeBtnExpense.kb-type-active { background: var(--vermillion); color: var(--paper); border-color: var(--vermillion); }
   #typeBtnIncome.kb-type-active { background: var(--income); color: var(--paper); border-color: var(--income); }
+  #chargeMethodPaypay.kb-type-active { background: #2F6FB0; color: white; border-color: #2F6FB0; }
+  #chargeMethodBundle.kb-type-active { background: #C9702A; color: white; border-color: #C9702A; }
 
   .kb-payment-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
   .kb-payment-btn {
@@ -342,6 +344,10 @@
   .kb-bundle-pay-btn:hover { background: #235f3d; }
   .kb-bundle-pay-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 
+  .kb-electronic-balances { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .kb-electronic-card { flex: 1 1 140px; min-width: 140px; padding: 12px 16px; }
+  .kb-electronic-card .kb-total-value { font-size: 20px; }
+
   .kb-lightbox { background: rgba(20,20,18,0.85); }
   .kb-lightbox img { max-width: 100%; max-height: 85vh; border-radius: 10px; display: block; }
 
@@ -445,8 +451,28 @@
 
       <div class="kb-subs">
         <div class="kb-subs-header">
-          <div class="kb-subs-title">バンドルカード後払い</div>
+          <div class="kb-subs-title">電子決済</div>
           <button type="button" class="kb-add-item-btn" id="addBundleBtn">＋ 記録</button>
+        </div>
+        <div class="kb-electronic-balances">
+          <div class="kb-total-card kb-electronic-card" style="background:#2F6FB0;">
+            <div class="kb-total-label">PayPay残高</div>
+            <div class="kb-total-value" id="paypayBalanceValue"></div>
+          </div>
+          <div class="kb-total-card kb-electronic-card" style="background:#C9702A;">
+            <div class="kb-total-label">バンドルカード残高</div>
+            <div class="kb-total-value" id="bundleBalanceValue"></div>
+          </div>
+        </div>
+        <div class="kb-field-row">
+          <div class="kb-field">
+            <label for="paypayInitialInput">PayPay初期残高（円）</label>
+            <input id="paypayInitialInput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" />
+          </div>
+          <div class="kb-field">
+            <label for="bundleInitialInput">バンドルカード初期残高（円）</label>
+            <input id="bundleInitialInput" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" />
+          </div>
         </div>
         <div id="bundleSummary"></div>
         <div id="bundleList"></div>
@@ -564,15 +590,23 @@
 <div class="kb-overlay kb-hidden" id="bundleOverlay">
   <div class="kb-modal">
     <div class="kb-modal-header">
-      <div class="kb-modal-title">バンドルカード後払いを記録</div>
+      <div class="kb-modal-title" id="bundleModalTitle">電子決済を記録</div>
       <button class="kb-modal-close" id="bundleCloseBtn" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div class="kb-type-toggle" id="chargeMethodToggle">
+      <button type="button" class="kb-type-btn" id="chargeMethodPaypay" data-method="paypay">PayPay</button>
+      <button type="button" class="kb-type-btn" id="chargeMethodBundle" data-method="bundle">バンドルカード</button>
+    </div>
+    <div class="kb-type-toggle kb-hidden" id="chargeDeferredToggle">
+      <button type="button" class="kb-type-btn" data-deferred="0">通常入金</button>
+      <button type="button" class="kb-type-btn" data-deferred="1">後払い</button>
     </div>
     <div class="kb-field">
       <label for="bundleDate">日付</label>
       <input id="bundleDate" type="date" />
     </div>
     <div class="kb-field">
-      <label for="bundleAmount">金額（円・手数料込みで入力）</label>
+      <label for="bundleAmount" id="bundleAmountLabel">金額（円）</label>
       <input id="bundleAmount" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="5000" />
     </div>
     <div class="kb-form-error kb-hidden" id="bundleFormError"></div>
@@ -612,6 +646,9 @@
   var entries = [];
   var subscriptions = [];
   var bundleCharges = [];
+  var electronicInitial = { paypay: 0, bundle: 0 };
+  var currentChargeMethod = "paypay";
+  var currentChargeDeferred = false;
   var viewDate = new Date();
   var selectedDay = toDateStr(new Date());
   var selectedCategory = CATEGORIES[0].id;
@@ -630,6 +667,7 @@
   var ENTRIES_KEY = "kakeibo:entries";
   var SUBS_KEY = "kakeibo:subscriptions";
   var BUNDLE_KEY = "kakeibo:bundleCharges";
+  var ELECTRONIC_INITIAL_KEY = "kakeibo:electronicInitial";
   var LAST_EXPORT_KEY = "kakeibo:lastExport";
   var EXPORT_SNOOZE_KEY = "kakeibo:exportSnoozeUntil";
   var BACKUP_REMIND_DAYS = 30;
@@ -660,7 +698,11 @@
     for (var i = 0; i < CATEGORIES.length; i++) { if (CATEGORIES[i].id === id) return CATEGORIES[i]; }
     return CATEGORIES[CATEGORIES.length - 1];
   }
-  function typeOf(entry) { return entry.type === "income" ? "income" : "expense"; }
+  function typeOf(entry) {
+    if (entry.type === "income") return "income";
+    if (entry.type === "charge") return "charge";
+    return "expense";
+  }
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -691,6 +733,9 @@
       "exportBtn", "importBtn", "importFile",
       "backupBanner", "backupBannerText", "backupNowBtn", "backupLaterBtn",
       "addBundleBtn", "bundleSummary", "bundleList", "bundleOverlay", "bundleCloseBtn",
+      "bundleModalTitle", "chargeMethodToggle", "chargeMethodPaypay", "chargeMethodBundle",
+      "chargeDeferredToggle", "bundleAmountLabel",
+      "paypayBalanceValue", "bundleBalanceValue", "paypayInitialInput", "bundleInitialInput",
       "bundleDate", "bundleAmount", "bundleFormError", "bundleCancelBtn", "bundleSubmitBtn",
       "photoLightbox", "lightboxImg"
     ].forEach(function (id) { els[id] = document.getElementById(id); });
@@ -746,10 +791,23 @@
       if (bcLocal) { try { bundleCharges = JSON.parse(bcLocal); } catch (e2) { bundleCharges = []; } }
     }
 
+    var eiCloud = await cloudGet(ELECTRONIC_INITIAL_KEY);
+    if (eiCloud) {
+      try { electronicInitial = JSON.parse(eiCloud); } catch (e) { electronicInitial = { paypay: 0, bundle: 0 }; }
+    } else {
+      var eiLocal = lsGet(ELECTRONIC_INITIAL_KEY);
+      if (eiLocal) { try { electronicInitial = JSON.parse(eiLocal); } catch (e2) { electronicInitial = { paypay: 0, bundle: 0 }; } }
+    }
+    if (!electronicInitial || typeof electronicInitial !== "object") electronicInitial = { paypay: 0, bundle: 0 };
+    electronicInitial.paypay = electronicInitial.paypay || 0;
+    electronicInitial.bundle = electronicInitial.bundle || 0;
+
     ensureSubscriptionEntriesForMonth(viewDate);
 
     els.loadingMsg.classList.add("kb-hidden");
     els.mainContent.classList.remove("kb-hidden");
+    els.paypayInitialInput.value = electronicInitial.paypay || "";
+    els.bundleInitialInput.value = electronicInitial.bundle || "";
     renderAll();
     renderSubs();
     renderBundle();
@@ -792,6 +850,12 @@
     var json = JSON.stringify(bundleCharges);
     await cloudSet(BUNDLE_KEY, json);
     lsSet(BUNDLE_KEY, json);
+  }
+
+  async function persistElectronicInitial() {
+    var json = JSON.stringify(electronicInitial);
+    await cloudSet(ELECTRONIC_INITIAL_KEY, json);
+    lsSet(ELECTRONIC_INITIAL_KEY, json);
   }
 
   // ---------- Recurring subscriptions ----------
@@ -1274,7 +1338,9 @@
     var dayIncomeTotals = {};
     var daySubDates = {};
     getMonthEntries().forEach(function (e) {
-      if (typeOf(e) === "income") {
+      var t = typeOf(e);
+      if (t === "charge") return;
+      if (t === "income") {
         dayIncomeTotals[e.date] = (dayIncomeTotals[e.date] || 0) + Number(e.amount || 0);
       } else {
         if (e.recurringId) daySubDates[e.date] = true;
@@ -1345,6 +1411,20 @@
     els.entryList.innerHTML =
       '<div class="kb-entry-list">' +
       dayEntries.map(function (e) {
+        if (typeOf(e) === "charge") {
+          var cm = paymentMethodOf(e.method);
+          return (
+            '<div class="kb-entry kb-entry-income">' +
+            '<div class="kb-entry-time">' + escapeHtml(e.time) + "</div>" +
+            '<div class="kb-entry-info"><div class="kb-entry-store">' + escapeHtml(cm.label) + "入金</div></div>" +
+            '<span class="kb-entry-cat" style="background:' + cm.color + '">入金</span>' +
+            '<div style="display:flex;align-items:center;gap:6px">' +
+            '<span class="kb-entry-amount kb-entry-amount-income">+' + formatMoney(e.amount) + "</span>" +
+            '<button type="button" class="kb-icon-btn kb-icon-del kb-entry-del" data-id="' + e.id + '" aria-label="削除">✕</button>' +
+            "</div>" +
+            "</div>"
+          );
+        }
         if (typeOf(e) === "income") {
           return (
             '<div class="kb-entry kb-entry-income">' +
@@ -1549,7 +1629,24 @@
 
   // ---------- Bundle card deferred payment ----------
 
+  function updateChargeMethodUI() {
+    els.chargeMethodPaypay.classList.toggle("kb-type-active", currentChargeMethod === "paypay");
+    els.chargeMethodBundle.classList.toggle("kb-type-active", currentChargeMethod === "bundle");
+    els.chargeDeferredToggle.classList.toggle("kb-hidden", currentChargeMethod !== "bundle");
+    if (currentChargeMethod !== "bundle") currentChargeDeferred = false;
+    els.chargeDeferredToggle.querySelectorAll(".kb-type-btn").forEach(function (btn) {
+      var isDeferredBtn = btn.getAttribute("data-deferred") === "1";
+      btn.classList.toggle("kb-type-active", isDeferredBtn === currentChargeDeferred);
+    });
+    var cm = paymentMethodOf(currentChargeMethod);
+    els.bundleModalTitle.textContent = cm.label + (currentChargeDeferred ? "（後払い）" : "") + "を記録";
+    els.bundleAmountLabel.textContent = currentChargeDeferred ? "金額（円・手数料込みで入力）" : "金額（円）";
+  }
+
   function openBundleForm() {
+    currentChargeMethod = "paypay";
+    currentChargeDeferred = false;
+    updateChargeMethodUI();
     els.bundleDate.value = toDateStr(new Date());
     els.bundleAmount.value = "";
     els.bundleFormError.classList.add("kb-hidden");
@@ -1569,8 +1666,23 @@
     var amount = Number(els.bundleAmount.value);
     if (!dateVal) { showBundleFormError("日付を入力してください"); return; }
     if (!amount || amount <= 0) { showBundleFormError("金額は1円以上で入力してください"); return; }
-    bundleCharges.push({ id: genId(), date: dateVal, amount: amount });
-    persistBundleCharges();
+
+    if (currentChargeMethod === "bundle" && currentChargeDeferred) {
+      bundleCharges.push({ id: genId(), date: dateVal, amount: amount });
+      persistBundleCharges();
+    } else {
+      entries.push({
+        id: genId(),
+        date: dateVal,
+        time: "--:--",
+        type: "charge",
+        method: currentChargeMethod,
+        amount: amount
+      });
+      persistEntries();
+      if (dateVal.indexOf(monthKeyOf(viewDate)) === 0) selectedDay = dateVal;
+      renderAll();
+    }
     closeBundleForm();
     renderBundle();
   }
@@ -1609,10 +1721,31 @@
     return new Date(d.getFullYear(), d.getMonth() + 2, 0);
   }
 
+  function computeMethodBalance(method) {
+    var initial = Number((electronicInitial && electronicInitial[method]) || 0);
+    var chargeSum = entries
+      .filter(function (e) { return typeOf(e) === "charge" && e.method === method; })
+      .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
+    var deferredSum = method === "bundle"
+      ? bundleCharges.reduce(function (s, c) { return s + Number(c.amount || 0); }, 0)
+      : 0;
+    var spentSum = entries
+      .filter(function (e) { return typeOf(e) === "expense" && e.paymentMethod === method; })
+      .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
+    return initial + chargeSum + deferredSum - spentSum;
+  }
+
+  function renderElectronicBalances() {
+    els.paypayBalanceValue.textContent = formatMoney(computeMethodBalance("paypay"));
+    els.bundleBalanceValue.textContent = formatMoney(computeMethodBalance("bundle"));
+  }
+
   function renderBundle() {
+    renderElectronicBalances();
+
     if (bundleCharges.length === 0) {
       els.bundleSummary.innerHTML = "";
-      els.bundleList.innerHTML = '<div class="kb-empty-state">まだ記録がありません</div>';
+      els.bundleList.innerHTML = '<div class="kb-empty-state">後払いの記録はまだありません</div>';
       return;
     }
 
@@ -1657,7 +1790,8 @@
       exportedAt: new Date().toISOString(),
       entries: entries,
       subscriptions: subscriptions,
-      bundleCharges: bundleCharges
+      bundleCharges: bundleCharges,
+      electronicInitial: electronicInitial
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
@@ -1691,9 +1825,13 @@
       entries = data.entries || [];
       subscriptions = data.subscriptions || [];
       bundleCharges = data.bundleCharges || [];
+      electronicInitial = data.electronicInitial || { paypay: 0, bundle: 0 };
       persistEntries();
       persistSubscriptions();
       persistBundleCharges();
+      persistElectronicInitial();
+      els.paypayInitialInput.value = electronicInitial.paypay || "";
+      els.bundleInitialInput.value = electronicInitial.bundle || "";
       lsSet(LAST_EXPORT_KEY, String(Date.now()));
       els.backupBanner.classList.add("kb-hidden");
       renderAll();
@@ -1857,6 +1995,28 @@
     els.bundleCancelBtn.addEventListener("click", closeBundleForm);
     els.bundleOverlay.addEventListener("click", function (e) { if (e.target === els.bundleOverlay) closeBundleForm(); });
     els.bundleSubmitBtn.addEventListener("click", handleBundleSubmit);
+    els.chargeMethodToggle.addEventListener("click", function (e) {
+      var btn = e.target.closest(".kb-type-btn");
+      if (!btn) return;
+      currentChargeMethod = btn.getAttribute("data-method");
+      updateChargeMethodUI();
+    });
+    els.chargeDeferredToggle.addEventListener("click", function (e) {
+      var btn = e.target.closest(".kb-type-btn");
+      if (!btn) return;
+      currentChargeDeferred = btn.getAttribute("data-deferred") === "1";
+      updateChargeMethodUI();
+    });
+    els.paypayInitialInput.addEventListener("change", function () {
+      electronicInitial.paypay = Number(els.paypayInitialInput.value) || 0;
+      persistElectronicInitial();
+      renderElectronicBalances();
+    });
+    els.bundleInitialInput.addEventListener("change", function () {
+      electronicInitial.bundle = Number(els.bundleInitialInput.value) || 0;
+      persistElectronicInitial();
+      renderElectronicBalances();
+    });
     els.bundleList.addEventListener("click", function (e) {
       var delBtn = e.target.closest(".kb-bundle-del");
       if (delBtn) { removeBundleCharge(delBtn.getAttribute("data-id")); return; }
