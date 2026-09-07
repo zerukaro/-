@@ -85,6 +85,9 @@
   .kb-cat-track { background: var(--paper-dark); border-radius: 4px; height: 7px; overflow: hidden; }
   .kb-cat-fill { height: 100%; border-radius: 4px; }
   .kb-cat-amount { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+  .kb-payment-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 10px; color: var(--ink-soft); }
+  .kb-payment-legend-item { display: flex; align-items: center; gap: 4px; }
+  .kb-payment-legend-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 
   .kb-calendar { border: 1px solid var(--paper-line); border-radius: 12px; overflow: hidden; }
   .kb-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--paper-dark); }
@@ -149,7 +152,7 @@
 
   .kb-entry-list { display: flex; flex-direction: column; gap: 8px; }
   .kb-entry {
-    display: grid; grid-template-columns: 46px 1fr auto auto; align-items: center; gap: 10px;
+    display: grid; grid-template-columns: 46px 1fr auto auto auto; align-items: center; gap: 8px;
     background: white; border: 1px solid var(--paper-line); border-radius: 10px; padding: 9px 10px;
   }
   @media (max-width: 560px) {
@@ -162,6 +165,7 @@
   .kb-entry-recurring-badge { font-size: 9px; font-weight: 700; color: var(--indigo); background: rgba(31,58,92,0.1); padding: 1px 6px; border-radius: 8px; }
   .kb-entry-item { font-size: 12px; color: var(--ink-soft); margin-top: 1px; }
   .kb-entry-cat { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; color: white; white-space: nowrap; }
+  .kb-entry-pm { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; color: white; white-space: nowrap; }
   .kb-entry-cat-income { background: var(--income); }
   .kb-entry-amount { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .kb-entry-amount-income { color: var(--income); }
@@ -196,6 +200,17 @@
   .kb-type-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   #typeBtnExpense.kb-type-active { background: var(--vermillion); color: var(--paper); border-color: var(--vermillion); }
   #typeBtnIncome.kb-type-active { background: var(--income); color: var(--paper); border-color: var(--income); }
+
+  .kb-payment-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
+  .kb-payment-btn {
+    flex: 1; min-width: 70px; padding: 8px 4px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+    border: 1.5px solid var(--paper-line); background: white; color: var(--ink-soft);
+  }
+  .kb-payment-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .kb-payment-btn.kb-payment-active { color: white; border-color: transparent; }
+  .kb-payment-btn.kb-payment-active[data-method="cash"] { background: #9C9585; }
+  .kb-payment-btn.kb-payment-active[data-method="paypay"] { background: #2F6FB0; }
+  .kb-payment-btn.kb-payment-active[data-method="bundle"] { background: #C9702A; }
 
   .kb-field { margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
   .kb-field label { font-size: 11px; color: var(--ink-soft); font-weight: 600; }
@@ -304,6 +319,26 @@
   .kb-sub-day { color: var(--ink-soft); text-align: right; }
   .kb-sub-amount { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+  .kb-bundle-due {
+    background: rgba(201,112,42,0.1); border: 1px solid rgba(201,112,42,0.35); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px; font-size: 13px; color: var(--ink);
+  }
+  .kb-bundle-due.kb-bundle-overdue { background: rgba(183,65,14,0.12); border-color: rgba(183,65,14,0.4); }
+  .kb-bundle-due-label { font-weight: 700; }
+  .kb-bundle-due-tag { font-size: 10px; font-weight: 700; color: var(--vermillion); margin-left: 6px; }
+  .kb-bundle-row {
+    display: grid; grid-template-columns: 1fr 80px auto auto; align-items: center; gap: 6px;
+    background: white; border: 1px solid var(--paper-line); border-radius: 10px; padding: 8px 10px; font-size: 12px; margin-bottom: 6px;
+  }
+  .kb-bundle-date { color: var(--ink-soft); }
+  .kb-bundle-amount { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kb-bundle-pay-btn {
+    background: var(--income); color: white; border: none; border-radius: 8px; padding: 6px 10px;
+    font-size: 11px; font-weight: 700; cursor: pointer;
+  }
+  .kb-bundle-pay-btn:hover { background: #235f3d; }
+  .kb-bundle-pay-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
   .kb-lightbox { background: rgba(20,20,18,0.85); }
   .kb-lightbox img { max-width: 100%; max-height: 85vh; border-radius: 10px; display: block; }
 
@@ -407,6 +442,15 @@
 
       <div class="kb-subs">
         <div class="kb-subs-header">
+          <div class="kb-subs-title">バンドルカード後払い</div>
+          <button type="button" class="kb-add-item-btn" id="addBundleBtn">＋ 記録</button>
+        </div>
+        <div id="bundleSummary"></div>
+        <div id="bundleList"></div>
+      </div>
+
+      <div class="kb-subs">
+        <div class="kb-subs-header">
           <div class="kb-subs-title">データ管理</div>
         </div>
         <div class="kb-data-mgmt-actions">
@@ -469,6 +513,14 @@
         </div>
         <div class="kb-photo-hint">自動で圧縮して保存します（保存容量の節約のため）</div>
       </div>
+      <div class="kb-field" id="paymentField">
+        <label>支払い方法</label>
+        <div class="kb-payment-toggle" id="paymentToggle">
+          <button type="button" class="kb-payment-btn kb-payment-active" data-method="cash">現金</button>
+          <button type="button" class="kb-payment-btn" data-method="paypay">PayPay</button>
+          <button type="button" class="kb-payment-btn" data-method="bundle">バンドルカード</button>
+        </div>
+      </div>
       <div class="kb-form-error kb-hidden" id="formError"></div>
       <div class="kb-modal-actions">
         <button type="button" class="kb-btn-secondary" id="cancelBtn">キャンセル</button>
@@ -506,6 +558,28 @@
   </div>
 </div>
 
+<div class="kb-overlay kb-hidden" id="bundleOverlay">
+  <div class="kb-modal">
+    <div class="kb-modal-header">
+      <div class="kb-modal-title">バンドルカード後払いを記録</div>
+      <button class="kb-modal-close" id="bundleCloseBtn" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div class="kb-field">
+      <label for="bundleDate">日付</label>
+      <input id="bundleDate" type="date" />
+    </div>
+    <div class="kb-field">
+      <label for="bundleAmount">金額（円・手数料込みで入力）</label>
+      <input id="bundleAmount" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="5000" />
+    </div>
+    <div class="kb-form-error kb-hidden" id="bundleFormError"></div>
+    <div class="kb-modal-actions">
+      <button type="button" class="kb-btn-secondary" id="bundleCancelBtn">キャンセル</button>
+      <button type="button" class="kb-btn-primary" id="bundleSubmitBtn">記録する</button>
+    </div>
+  </div>
+</div>
+
 <div class="kb-overlay kb-lightbox kb-hidden" id="photoLightbox">
   <img id="lightboxImg" alt="レシート写真" />
 </div>
@@ -522,12 +596,24 @@
     { id: "other", label: "その他", color: "#6B6459" }
   ];
 
+  var PAYMENT_METHODS = [
+    { id: "cash", label: "現金", color: "#9C9585" },
+    { id: "paypay", label: "PayPay", color: "#2F6FB0" },
+    { id: "bundle", label: "バンドルカード", color: "#C9702A" }
+  ];
+  function paymentMethodOf(id) {
+    for (var i = 0; i < PAYMENT_METHODS.length; i++) { if (PAYMENT_METHODS[i].id === id) return PAYMENT_METHODS[i]; }
+    return PAYMENT_METHODS[0];
+  }
+
   var entries = [];
   var subscriptions = [];
+  var bundleCharges = [];
   var viewDate = new Date();
   var selectedDay = toDateStr(new Date());
   var selectedCategory = CATEGORIES[0].id;
   var currentEntryType = "expense";
+  var currentPaymentMethod = "cash";
   var editingEntryId = null;
   var currentPhotoDataUrl = null;
   var stampDay = null;
@@ -540,6 +626,7 @@
 
   var ENTRIES_KEY = "kakeibo:entries";
   var SUBS_KEY = "kakeibo:subscriptions";
+  var BUNDLE_KEY = "kakeibo:bundleCharges";
   var LAST_EXPORT_KEY = "kakeibo:lastExport";
   var EXPORT_SNOOZE_KEY = "kakeibo:exportSnoozeUntil";
   var BACKUP_REMIND_DAYS = 30;
@@ -591,6 +678,7 @@
       "expenseItemsField", "expenseCatField", "incomeAmountField", "fIncomeAmount",
       "itemsContainer", "addItemBtn", "itemsTotalDisplay",
       "photoField", "fPhoto", "photoPreviewWrap", "photoPreview", "removePhotoBtn",
+      "paymentField", "paymentToggle",
       "catSelect", "formError", "cancelBtn", "submitBtn",
       "aggTabWeek", "aggTabMonth", "aggTabYear", "aggPrev", "aggNext",
       "aggPeriodLabel", "aggTotal", "aggList",
@@ -599,6 +687,8 @@
       "subCancelBtn", "subSubmitBtn",
       "exportBtn", "importBtn", "importFile",
       "backupBanner", "backupBannerText", "backupNowBtn", "backupLaterBtn",
+      "addBundleBtn", "bundleSummary", "bundleList", "bundleOverlay", "bundleCloseBtn",
+      "bundleDate", "bundleAmount", "bundleFormError", "bundleCancelBtn", "bundleSubmitBtn",
       "photoLightbox", "lightboxImg"
     ].forEach(function (id) { els[id] = document.getElementById(id); });
   }
@@ -645,12 +735,21 @@
       if (sLocal) { try { subscriptions = JSON.parse(sLocal); } catch (e2) { subscriptions = []; } }
     }
 
+    var bcCloud = await cloudGet(BUNDLE_KEY);
+    if (bcCloud) {
+      try { bundleCharges = JSON.parse(bcCloud); } catch (e) { bundleCharges = []; }
+    } else {
+      var bcLocal = lsGet(BUNDLE_KEY);
+      if (bcLocal) { try { bundleCharges = JSON.parse(bcLocal); } catch (e2) { bundleCharges = []; } }
+    }
+
     ensureSubscriptionEntriesForMonth(viewDate);
 
     els.loadingMsg.classList.add("kb-hidden");
     els.mainContent.classList.remove("kb-hidden");
     renderAll();
     renderSubs();
+    renderBundle();
     checkBackupReminder();
   }
 
@@ -684,6 +783,12 @@
     var json = JSON.stringify(subscriptions);
     await cloudSet(SUBS_KEY, json);
     lsSet(SUBS_KEY, json);
+  }
+
+  async function persistBundleCharges() {
+    var json = JSON.stringify(bundleCharges);
+    await cloudSet(BUNDLE_KEY, json);
+    lsSet(BUNDLE_KEY, json);
   }
 
   // ---------- Recurring subscriptions ----------
@@ -914,16 +1019,24 @@
     els.itemsTotalDisplay.classList.toggle("kb-hidden", isIncome);
     els.expenseCatField.classList.toggle("kb-hidden", isIncome);
     els.photoField.classList.toggle("kb-hidden", isIncome);
+    els.paymentField.classList.toggle("kb-hidden", isIncome);
     els.incomeAmountField.classList.toggle("kb-hidden", !isIncome);
     els.fStoreLabel.textContent = isIncome ? "収入源（例：アルバイト、お小遣い）" : "店名";
     els.fStore.placeholder = isIncome ? "例：アルバイト" : "例：セブンイレブン";
     els.submitBtn.textContent = editingEntryId ? "更新する" : "記帳する";
   }
 
+  function updatePaymentUI() {
+    els.paymentToggle.querySelectorAll(".kb-payment-btn").forEach(function (btn) {
+      btn.classList.toggle("kb-payment-active", btn.getAttribute("data-method") === currentPaymentMethod);
+    });
+  }
+
   function openForm(dateStr, type) {
     selectedDay = dateStr;
     currentEntryType = type === "income" ? "income" : "expense";
     editingEntryId = null;
+    currentPaymentMethod = "cash";
     els.fTime.value = "";
     els.fStore.value = "";
     els.fIncomeAmount.value = "";
@@ -933,6 +1046,7 @@
     renderCatChips();
     resetItemRows();
     updateTypeUI();
+    updatePaymentUI();
     els.formError.classList.add("kb-hidden");
     els.formError.textContent = "";
     var parts = dateStr.split("-");
@@ -947,6 +1061,7 @@
     selectedDay = entry.date;
     currentEntryType = typeOf(entry);
     editingEntryId = entry.id;
+    currentPaymentMethod = entry.paymentMethod || "cash";
     els.fTime.value = entry.time === "--:--" ? "" : entry.time;
     els.fStore.value = entry.store || "";
     els.fPhoto.value = "";
@@ -961,6 +1076,7 @@
     }
     renderCatChips();
     updateTypeUI();
+    updatePaymentUI();
     els.formError.classList.add("kb-hidden");
     els.formError.textContent = "";
     els.modalTitle.textContent = "記録を編集";
@@ -1012,7 +1128,8 @@
         store: store,
         category: selectedCategory,
         items: items,
-        amount: totalAmount
+        amount: totalAmount,
+        paymentMethod: currentPaymentMethod
       };
       if (photo) payload.photo = photo;
       saveEntry(payload);
@@ -1099,7 +1216,7 @@
       .filter(function (e) { return typeOf(e) === "income"; })
       .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
     var allTimeExpense = upToViewedMonth
-      .filter(function (e) { return typeOf(e) === "expense"; })
+      .filter(function (e) { return typeOf(e) === "expense" && (e.paymentMethod || "cash") === "cash"; })
       .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
     var balance = allTimeIncome - allTimeExpense;
 
@@ -1110,20 +1227,34 @@
     els.balanceCard.classList.toggle("kb-balance-negative", balance < 0);
 
     var totals = {};
-    CATEGORIES.forEach(function (c) { totals[c.id] = 0; });
-    expenseEntries.forEach(function (e) { totals[e.category] = (totals[e.category] || 0) + Number(e.amount || 0); });
+    var paymentTotals = {};
+    CATEGORIES.forEach(function (c) { totals[c.id] = 0; paymentTotals[c.id] = { cash: 0, paypay: 0, bundle: 0 }; });
+    expenseEntries.forEach(function (e) {
+      totals[e.category] = (totals[e.category] || 0) + Number(e.amount || 0);
+      var pm = e.paymentMethod || "cash";
+      if (!paymentTotals[e.category]) paymentTotals[e.category] = { cash: 0, paypay: 0, bundle: 0 };
+      paymentTotals[e.category][pm] = (paymentTotals[e.category][pm] || 0) + Number(e.amount || 0);
+    });
 
     els.catBars.innerHTML = CATEGORIES.filter(function (c) { return c.id !== "subscription"; }).map(function (c) {
       var amt = totals[c.id] || 0;
-      var pct = monthTotal > 0 ? Math.round((amt / monthTotal) * 100) : 0;
+      var pm = paymentTotals[c.id] || { cash: 0, paypay: 0, bundle: 0 };
+      var segHtml = PAYMENT_METHODS.map(function (m) {
+        var mAmt = pm[m.id] || 0;
+        if (mAmt <= 0 || amt <= 0) return "";
+        var mPct = (mAmt / amt) * 100;
+        return '<span style="display:block;height:100%;width:' + mPct + "%;background:" + m.color + ';"></span>';
+      }).join("");
       return (
         '<div class="kb-cat-row">' +
         '<span style="color:' + c.color + ';font-weight:600">' + escapeHtml(c.label) + "</span>" +
-        '<span class="kb-cat-track"><span class="kb-cat-fill" style="width:' + pct + "%;background:" + c.color + '"></span></span>' +
+        '<span class="kb-cat-track" style="display:flex;">' + segHtml + "</span>" +
         '<span class="kb-cat-amount">' + formatMoney(amt) + "</span>" +
         "</div>"
       );
-    }).join("");
+    }).join("") + '<div class="kb-payment-legend">' + PAYMENT_METHODS.map(function (m) {
+      return '<span class="kb-payment-legend-item"><span class="kb-payment-legend-dot" style="background:' + m.color + '"></span>' + escapeHtml(m.label) + "</span>";
+    }).join("") + "</div>";
   }
 
   function renderCalendar() {
@@ -1141,8 +1272,10 @@
       if (typeOf(e) === "income") {
         dayIncomeTotals[e.date] = (dayIncomeTotals[e.date] || 0) + Number(e.amount || 0);
       } else {
-        dayTotals[e.date] = (dayTotals[e.date] || 0) + Number(e.amount || 0);
         if (e.recurringId) daySubDates[e.date] = true;
+        if (e.paymentMethod === "cash") {
+          dayTotals[e.date] = (dayTotals[e.date] || 0) + Number(e.amount || 0);
+        }
       }
     });
 
@@ -1232,6 +1365,9 @@
         var photoBadge = e.photo
           ? '<button type="button" class="kb-entry-photo-mini-btn kb-entry-photo" data-id="' + e.id + '"><img src="' + e.photo + '" alt="レシート写真" /></button>'
           : "";
+        var pmTag = e.paymentMethod
+          ? '<span class="kb-entry-pm" style="background:' + paymentMethodOf(e.paymentMethod).color + '">' + escapeHtml(paymentMethodOf(e.paymentMethod).label) + "</span>"
+          : "";
         return (
           '<div class="kb-entry">' +
           '<div class="kb-entry-time">' + escapeHtml(e.time) + "</div>" +
@@ -1239,6 +1375,7 @@
           '<div class="kb-entry-store">' + escapeHtml(e.store) + recurringBadge + photoBadge + "</div>" +
           itemsHtml +
           "</div>" +
+          pmTag +
           '<span class="kb-entry-cat" style="background:' + cat.color + '">' + escapeHtml(cat.label) + "</span>" +
           '<div style="display:flex;align-items:center;gap:6px">' +
           '<span class="kb-entry-amount">' + formatMoney(e.amount) + "</span>" +
@@ -1405,13 +1542,117 @@
     }).join("");
   }
 
+  // ---------- Bundle card deferred payment ----------
+
+  function openBundleForm() {
+    els.bundleDate.value = toDateStr(new Date());
+    els.bundleAmount.value = "";
+    els.bundleFormError.classList.add("kb-hidden");
+    els.bundleOverlay.classList.remove("kb-hidden");
+    window.setTimeout(function () { els.bundleAmount.focus(); }, 0);
+  }
+
+  function closeBundleForm() { els.bundleOverlay.classList.add("kb-hidden"); }
+
+  function showBundleFormError(msg) {
+    els.bundleFormError.textContent = msg;
+    els.bundleFormError.classList.remove("kb-hidden");
+  }
+
+  function handleBundleSubmit() {
+    var dateVal = els.bundleDate.value;
+    var amount = Number(els.bundleAmount.value);
+    if (!dateVal) { showBundleFormError("日付を入力してください"); return; }
+    if (!amount || amount <= 0) { showBundleFormError("金額は1円以上で入力してください"); return; }
+    bundleCharges.push({ id: genId(), date: dateVal, amount: amount });
+    persistBundleCharges();
+    closeBundleForm();
+    renderBundle();
+  }
+
+  function removeBundleCharge(id) {
+    bundleCharges = bundleCharges.filter(function (c) { return c.id !== id; });
+    persistBundleCharges();
+    renderBundle();
+  }
+
+  function payBundleCharge(id) {
+    var charge = bundleCharges.find(function (c) { return c.id === id; });
+    if (!charge) return;
+    var payDate = toDateStr(new Date());
+    entries.push({
+      id: genId(),
+      date: payDate,
+      time: "--:--",
+      type: "expense",
+      store: "バンドルカード返済",
+      category: "other",
+      items: [{ name: "バンドルカード返済", amount: charge.amount }],
+      amount: charge.amount,
+      paymentMethod: "cash"
+    });
+    persistEntries();
+    bundleCharges = bundleCharges.filter(function (c) { return c.id !== id; });
+    persistBundleCharges();
+    if (payDate.indexOf(monthKeyOf(viewDate)) === 0) selectedDay = payDate;
+    renderAll();
+    renderBundle();
+  }
+
+  function bundleDueDate(dateStr) {
+    var d = new Date(dateStr);
+    return new Date(d.getFullYear(), d.getMonth() + 2, 0);
+  }
+
+  function renderBundle() {
+    if (bundleCharges.length === 0) {
+      els.bundleSummary.innerHTML = "";
+      els.bundleList.innerHTML = '<div class="kb-empty-state">まだ記録がありません</div>';
+      return;
+    }
+
+    var today = new Date();
+    var groups = {};
+    bundleCharges.forEach(function (c) {
+      var due = bundleDueDate(c.date);
+      var key = due.getFullYear() + "-" + pad(due.getMonth() + 1);
+      if (!groups[key]) groups[key] = { due: due, total: 0 };
+      groups[key].total += Number(c.amount || 0);
+    });
+    var groupKeys = Object.keys(groups).sort();
+
+    els.bundleSummary.innerHTML = groupKeys.map(function (key) {
+      var g = groups[key];
+      var overdue = g.due < today;
+      return (
+        '<div class="kb-bundle-due' + (overdue ? " kb-bundle-overdue" : "") + '">' +
+        '<span class="kb-bundle-due-label">' + (g.due.getMonth() + 1) + "月末までに " + formatMoney(g.total) + " を入金してください</span>" +
+        (overdue ? '<span class="kb-bundle-due-tag">期限切れ</span>' : "") +
+        "</div>"
+      );
+    }).join("");
+
+    var sorted = bundleCharges.slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
+    els.bundleList.innerHTML = sorted.map(function (c) {
+      return (
+        '<div class="kb-bundle-row">' +
+        '<span class="kb-bundle-date">' + c.date + "</span>" +
+        '<span class="kb-bundle-amount">' + formatMoney(c.amount) + "</span>" +
+        '<button type="button" class="kb-bundle-pay-btn kb-bundle-pay" data-id="' + c.id + '">支払う</button>' +
+        '<button type="button" class="kb-icon-btn kb-icon-del kb-bundle-del" data-id="' + c.id + '" aria-label="削除">✕</button>' +
+        "</div>"
+      );
+    }).join("");
+  }
+
   // ---------- Export / Import ----------
 
   function exportData() {
     var payload = {
       exportedAt: new Date().toISOString(),
       entries: entries,
-      subscriptions: subscriptions
+      subscriptions: subscriptions,
+      bundleCharges: bundleCharges
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
@@ -1444,12 +1685,15 @@
       if (!ok) return;
       entries = data.entries || [];
       subscriptions = data.subscriptions || [];
+      bundleCharges = data.bundleCharges || [];
       persistEntries();
       persistSubscriptions();
+      persistBundleCharges();
       lsSet(LAST_EXPORT_KEY, String(Date.now()));
       els.backupBanner.classList.add("kb-hidden");
       renderAll();
       renderSubs();
+      renderBundle();
     };
     reader.onerror = function () {
       window.alert("ファイルの読み込みに失敗しました。");
@@ -1478,6 +1722,13 @@
       if (!btn) return;
       currentEntryType = btn.getAttribute("data-type");
       updateTypeUI();
+    });
+
+    els.paymentToggle.addEventListener("click", function (e) {
+      var btn = e.target.closest(".kb-payment-btn");
+      if (!btn) return;
+      currentPaymentMethod = btn.getAttribute("data-method");
+      updatePaymentUI();
     });
 
     [els.fTime, els.fStore].forEach(function (input) {
@@ -1596,6 +1847,23 @@
       });
     });
 
+    els.addBundleBtn.addEventListener("click", openBundleForm);
+    els.bundleCloseBtn.addEventListener("click", closeBundleForm);
+    els.bundleCancelBtn.addEventListener("click", closeBundleForm);
+    els.bundleOverlay.addEventListener("click", function (e) { if (e.target === els.bundleOverlay) closeBundleForm(); });
+    els.bundleSubmitBtn.addEventListener("click", handleBundleSubmit);
+    els.bundleList.addEventListener("click", function (e) {
+      var delBtn = e.target.closest(".kb-bundle-del");
+      if (delBtn) { removeBundleCharge(delBtn.getAttribute("data-id")); return; }
+      var payBtn = e.target.closest(".kb-bundle-pay");
+      if (payBtn) payBundleCharge(payBtn.getAttribute("data-id"));
+    });
+    [els.bundleDate, els.bundleAmount].forEach(function (input) {
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); handleBundleSubmit(); }
+      });
+    });
+
     els.exportBtn.addEventListener("click", exportData);
     els.backupNowBtn.addEventListener("click", exportData);
     els.backupLaterBtn.addEventListener("click", function () {
@@ -1614,6 +1882,7 @@
       if (e.key !== "Escape") return;
       if (!els.overlay.classList.contains("kb-hidden")) closeForm();
       if (!els.subOverlay.classList.contains("kb-hidden")) closeSubForm();
+      if (!els.bundleOverlay.classList.contains("kb-hidden")) closeBundleForm();
       if (!els.photoLightbox.classList.contains("kb-hidden")) els.photoLightbox.classList.add("kb-hidden");
     });
 
