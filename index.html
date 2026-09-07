@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="家計簿" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><rect width='180' height='180' fill='%231F3A5C'/><circle cx='90' cy='90' r='56' fill='none' stroke='%23B7410E' stroke-width='7'/><text x='90' y='106' font-size='56' font-family='serif' fill='%23B7410E' text-anchor='middle'>済</text></svg>" />
 <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='12' fill='%231F3A5C'/><circle cx='32' cy='32' r='20' fill='none' stroke='%23B7410E' stroke-width='3'/><text x='32' y='39' font-size='20' font-family='serif' fill='%23B7410E' text-anchor='middle'>済</text></svg>" />
 <style>
@@ -1207,7 +1210,9 @@
     var monthEntries = getMonthEntries();
     var expenseEntries = monthEntries.filter(function (e) { return typeOf(e) === "expense"; });
     var incomeEntries = monthEntries.filter(function (e) { return typeOf(e) === "income"; });
-    var monthTotal = expenseEntries.reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
+    var monthCashTotal = expenseEntries
+      .filter(function (e) { return e.paymentMethod === "cash"; })
+      .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
     var monthIncome = incomeEntries.reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
 
     var viewMonthKey = monthKeyOf(viewDate);
@@ -1216,12 +1221,12 @@
       .filter(function (e) { return typeOf(e) === "income"; })
       .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
     var allTimeExpense = upToViewedMonth
-      .filter(function (e) { return typeOf(e) === "expense" && (e.paymentMethod || "cash") === "cash"; })
+      .filter(function (e) { return typeOf(e) === "expense" && e.paymentMethod === "cash"; })
       .reduce(function (s, e) { return s + Number(e.amount || 0); }, 0);
     var balance = allTimeIncome - allTimeExpense;
 
     els.totalLabel.textContent = (viewDate.getMonth() + 1) + "月の支出";
-    els.totalValue.textContent = formatMoney(monthTotal);
+    els.totalValue.textContent = formatMoney(monthCashTotal);
     els.incomeValue.textContent = formatMoney(monthIncome);
     els.balanceValue.textContent = (balance < 0 ? "-" : "") + formatMoney(Math.abs(balance));
     els.balanceCard.classList.toggle("kb-balance-negative", balance < 0);
